@@ -1,0 +1,153 @@
+#!/bin/bash
+
+# Get the directory of this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Source environment if exists
+if [ -f "$PROJECT_ROOT/env.sh" ]; then
+    source "$PROJECT_ROOT/env.sh"
+fi
+
+# Color codes for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+error_exit() {
+    echo -e "${RED}Error: $1${NC}" >&2
+    exit 1
+}
+
+success() {
+    echo -e "${GREEN}$1${NC}"
+}
+
+# Function to check/install GitHub CLI
+ensure_github_cli() {
+    if ! command -v gh >/dev/null 2>&1; then
+        echo "Installing GitHub CLI..."
+        if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
+            winget install --id GitHub.cli || error_exit "Failed to install GitHub CLI"
+        elif [[ "$OSTYPE" == "darwin"* ]]; then
+            brew install gh || error_exit "Failed to install GitHub CLI"
+        elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+            if command -v apt >/dev/null 2>&1; then
+                curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+                && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+                && sudo apt update \
+                && sudo apt install gh
+            elif command -v dnf >/dev/null 2>&1; then
+                sudo dnf install gh
+            else
+                error_exit "Unable to install GitHub CLI. Please install manually from https://cli.github.com/"
+            fi
+        fi
+    fi
+
+    # Ensure authentication
+    if ! gh auth status >/dev/null 2>&1; then
+        if [ -n "$GITHUB_TOKEN" ]; then
+            echo "$GITHUB_TOKEN" | gh auth login --with-token
+        else
+            gh auth login
+        fi
+    fi
+}
+
+# Function to create a new repository
+create_repo() {
+    local name="$1"
+    local description="$2"
+    local visibility="$3"
+    shift 3
+    local extra_args=("$@")
+
+    ensure_github_cli
+
+    echo "Creating repository: $name"
+    gh repo create "$name" --description "$description" --"$visibility" "${extra_args[@]}" || error_exit "Failed to create repository"
+    success "Repository created successfully: $name"
+}
+
+# Function to clone a repository
+clone_repo() {
+    local repo="$1"
+    local dir="$2"
+
+    ensure_github_cli
+
+    echo "Cloning repository: $repo"
+    if [ -n "$dir" ]; then
+        gh repo clone "$repo" "$dir" || error_exit "Failed to clone repository"
+    else
+        gh repo clone "$repo" || error_exit "Failed to clone repository"
+    fi
+    success "Repository cloned successfully"
+}
+
+# Function to push to a repository
+push_repo() {
+    local dir="${1:-.}"
+    local remote="${2:-origin}"
+    local branch="${3:-main}"
+
+    ensure_github_cli
+
+    echo "Pushing to repository..."
+    cd "$dir" || error_exit "Failed to change to directory: $dir"
+    
+    if ! git rev-parse --git-dir > /dev/null 2>&1; then
+        error_exit "Not a git repository: $dir"
+    fi
+
+    git push "$remote" "$branch" || error_exit "Failed to push to repository"
+    success "Successfully pushed to repository"
+}
+
+# Show help if no arguments provided
+if [ $# -eq 0 ]; then
+    cat << EOF
+Usage: github <command> [options]
+
+Commands:
+  create <name> [description] [public|private] [--team TEAM]  Create a new repository
+  clone <repo> [dir]                                         Clone a repository
+  push [dir] [remote] [branch]                              Push to a repository
+
+Examples:
+  github create myrepo "My new repository" private
+  github clone user/repo ./local-dir
+  github push ./repo-dir origin main
+
+Environment variables:
+  GITHUB_TOKEN    GitHub personal access token
+EOF
+    exit 1
+fi
+
+# Parse commands
+case "$1" in
+    create)
+        shift
+        if [ $# -lt 1 ]; then
+            error_exit "Repository name required"
+        fi
+        create_repo "$@"
+        ;;
+    clone)
+        shift
+        if [ $# -lt 1 ]; then
+            error_exit "Repository name required"
+        fi
+        clone_repo "$@"
+        ;;
+    push)
+        shift
+        push_repo "$@"
+        ;;
+    *)
+        error_exit "Unknown command: $1"
+        ;;
+esac
