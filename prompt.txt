@@ -1,0 +1,45 @@
+Claude Helpers Project
+====================
+
+This repository contains scripts and utilities designed for use by LLM agents (like Claude) to perform various operations through command-line interfaces. The scripts handle environment setup, credential management, and provide consistent interfaces to various tools.
+
+Available Tools
+-------------
+1. GitHub Operations (./bin/github)
+   - Repository management
+   - Issue tracking
+   - Pull requests
+   - Any GitHub CLI operation
+
+2. TerminusDB Operations (./bin/terminusdb)
+   - Knowledge unit management
+   - Database operations
+   - Query execution
+
+Usage Instructions
+----------------
+1. Always use the update-repo script first to ensure latest version:
+   ./bin/update-repo
+
+2. Tools follow a consistent pattern:
+   ./bin/<domain> <command> [options]
+
+3. Each tool handles its own prerequisites and credentials via env.sh
+
+Update Policy
+------------
+- Repository must be updated if changes are available
+- This prompt file must be re-read after any updates
+- Local modifications must be handled before updates
+
+Environment Setup
+---------------
+1. Copy env.template.sh to env.sh
+2. Configure required credentials in env.sh
+3. Run tool-specific setup if needed (e.g., './bin/github setup')
+
+Error Handling
+------------
+- Clear error messages indicate required actions
+- Credential errors suggest env.sh updates
+- Tool missing errors provide installation instructions
