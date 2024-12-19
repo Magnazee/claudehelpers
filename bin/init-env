@@ -1,0 +1,64 @@
+#!/bin/bash
+
+# Color codes for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Get the directory of this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Check if env.sh exists
+if [ ! -f "$PROJECT_ROOT/env.sh" ]; then
+    echo -e "${YELLOW}Environment file not found. Creating from template...${NC}"
+    cp "$PROJECT_ROOT/env.template.sh" "$PROJECT_ROOT/env.sh"
+    echo -e "${GREEN}Created env.sh${NC}"
+    echo -e "${YELLOW}Please edit $PROJECT_ROOT/env.sh to set your credentials${NC}"
+    exit 1
+fi
+
+# Source the environment file
+source "$PROJECT_ROOT/env.sh"
+
+# Verify required variables
+REQUIRED_VARS=(
+    "GITHUB_TOKEN"
+    "TERMINUSDB_SERVER"
+    "TERMINUSDB_USER"
+    "TERMINUSDB_PASSWORD"
+    "TERMINUSDB_TEAM"
+)
+
+MISSING_VARS=()
+for var in "${REQUIRED_VARS[@]}"; do
+    if [ -z "${!var}" ]; then
+        MISSING_VARS+=("$var")
+    fi
+done
+
+if [ ${#MISSING_VARS[@]} -ne 0 ]; then
+    echo -e "${RED}Error: The following required environment variables are not set:${NC}"
+    printf '%s\n' "${MISSING_VARS[@]}"
+    echo -e "${YELLOW}Please edit $PROJECT_ROOT/env.sh to set these variables${NC}"
+    exit 1
+fi
+
+# Set default values for optional variables if not set
+: "${CLAUDEHELPERS_HOME:=$PROJECT_ROOT}"
+: "${CLAUDEHELPERS_LOG_LEVEL:=INFO}"
+: "${CLAUDEHELPERS_TIMEOUT:=30000}"
+
+# Export all variables to ensure they're available to subprocesses
+export CLAUDEHELPERS_HOME
+export CLAUDEHELPERS_LOG_LEVEL
+export CLAUDEHELPERS_TIMEOUT
+
+# Add bin directory to PATH if not already present
+if [[ ":$PATH:" != *":$SCRIPT_DIR:"* ]]; then
+    export PATH="$SCRIPT_DIR:$PATH"
+    echo -e "${GREEN}Added $SCRIPT_DIR to PATH${NC}"
+fi
+
+echo -e "${GREEN}Environment initialized successfully!${NC}"
