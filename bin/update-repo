@@ -5,9 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 source "$PROJECT_ROOT/lib/wrapper-utils.sh"
 
-REPO_URL="https://github.com/mpolucha/claudehelpers.git"
-REPO_NAME="claudehelpers"
-DEFAULT_BRANCH="main"
+REPO_URL="https://github.com/Magnazee/claudehelpers.git"
+REPO_NAME="."
+DEFAULT_BRANCH="master"
 UPDATES_MADE=0
 
 check_and_update() {
