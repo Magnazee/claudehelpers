@@ -1,0 +1,95 @@
+#!/bin/bash
+
+# Get the directory of this script and source utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+source "$PROJECT_ROOT/lib/wrapper-utils.sh"
+
+REPO_URL="https://github.com/mpolucha/claudehelpers.git"
+REPO_NAME="claudehelpers"
+DEFAULT_BRANCH="main"
+
+check_and_update() {
+    local target_dir="$1"
+    local repo_url="$2"
+    local repo_name="$3"
+    local branch="${4:-$DEFAULT_BRANCH}"
+
+    # If directory doesn't exist, clone it
+    if [ ! -d "$target_dir/$repo_name" ]; then
+        echo "Repository not found. Cloning..."
+        git clone "$repo_url" "$target_dir/$repo_name" || error_exit "Clone failed"
+        success "Repository cloned successfully"
+        return 0
+    fi
+
+    # Change to repository directory
+    cd "$target_dir/$repo_name" || error_exit "Could not change to repository directory"
+
+    # Check if it's actually a git repository
+    if [ ! -d .git ]; then
+        error_exit "Directory exists but is not a git repository"
+    fi
+
+    # Verify remote
+    local remote_url=$(git config --get remote.origin.url)
+    if [ "$remote_url" != "$repo_url" ]; then
+        warning "Remote URL mismatch. Updating..."
+        git remote set-url origin "$repo_url" || error_exit "Failed to update remote URL"
+    fi
+
+    # Fetch and check status
+    echo "Checking for updates..."
+    git fetch origin "$branch" || error_exit "Failed to fetch from remote"
+    
+    local local_commit=$(git rev-parse HEAD)
+    local remote_commit=$(git rev-parse "origin/$branch")
+    
+    if [ "$local_commit" != "$remote_commit" ]; then
+        echo "Updates available. Pulling changes..."
+        
+        # Check for local changes
+        if ! git diff --quiet HEAD; then
+            error_exit "Local changes detected. Please commit or stash them before updating."
+        fi
+        
+        # Pull updates
+        if git pull origin "$branch"; then
+            success "Repository updated successfully"
+        else
+            error_exit "Failed to pull updates"
+        fi
+    else
+        success "Repository is up to date"
+    fi
+}
+
+# Show help if requested
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    cat << EOF
+Usage: update-repo [target_directory]
+
+Updates the claudehelpers repository, cloning it if it doesn't exist.
+If no target directory is specified, uses the parent of the script location.
+
+Options:
+  -h, --help    Show this help message
+
+Environment Variables (optional):
+  GITHUB_TOKEN  GitHub personal access token for private repositories
+
+Examples:
+  update-repo
+  update-repo /path/to/directory
+EOF
+    exit 0
+fi
+
+# Use provided directory or default to script's parent
+TARGET_DIR="${1:-$(dirname "$SCRIPT_DIR")}"
+
+# Ensure target directory exists
+mkdir -p "$TARGET_DIR" || error_exit "Could not create target directory"
+
+# Perform the check and update
+check_and_update "$TARGET_DIR" "$REPO_URL" "$REPO_NAME" "$DEFAULT_BRANCH"
