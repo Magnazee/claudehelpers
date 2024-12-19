@@ -56,98 +56,38 @@ ensure_github_cli() {
     fi
 }
 
-# Function to create a new repository
-create_repo() {
-    local name="$1"
-    local description="$2"
-    local visibility="$3"
-    shift 3
-    local extra_args=("$@")
-
-    ensure_github_cli
-
-    echo "Creating repository: $name"
-    gh repo create "$name" --description "$description" --"$visibility" "${extra_args[@]}" || error_exit "Failed to create repository"
-    success "Repository created successfully: $name"
-}
-
-# Function to clone a repository
-clone_repo() {
-    local repo="$1"
-    local dir="$2"
-
-    ensure_github_cli
-
-    echo "Cloning repository: $repo"
-    if [ -n "$dir" ]; then
-        gh repo clone "$repo" "$dir" || error_exit "Failed to clone repository"
-    else
-        gh repo clone "$repo" || error_exit "Failed to clone repository"
-    fi
-    success "Repository cloned successfully"
-}
-
-# Function to push to a repository
-push_repo() {
-    local dir="${1:-.}"
-    local remote="${2:-origin}"
-    local branch="${3:-main}"
-
-    ensure_github_cli
-
-    echo "Pushing to repository..."
-    cd "$dir" || error_exit "Failed to change to directory: $dir"
-    
-    if ! git rev-parse --git-dir > /dev/null 2>&1; then
-        error_exit "Not a git repository: $dir"
-    fi
-
-    git push "$remote" "$branch" || error_exit "Failed to push to repository"
-    success "Successfully pushed to repository"
-}
-
 # Show help if no arguments provided
 if [ $# -eq 0 ]; then
     cat << EOF
-Usage: github <command> [options]
+Usage: github <command> [arguments...]
 
-Commands:
-  create <name> [description] [public|private] [--team TEAM]  Create a new repository
-  clone <repo> [dir]                                         Clone a repository
-  push [dir] [remote] [branch]                              Push to a repository
+This is a wrapper around the GitHub CLI (gh) that handles:
+- Automatic CLI installation
+- Authentication via GITHUB_TOKEN or interactive login
+- Cross-platform support
 
-Examples:
-  github create myrepo "My new repository" private
-  github clone user/repo ./local-dir
-  github push ./repo-dir origin main
+All GitHub CLI commands are supported. Examples:
+  github repo create myrepo --public
+  github repo clone owner/repo
+  github issue list
+  github pr create
+  github release create v1.0.0
 
-Environment variables:
-  GITHUB_TOKEN    GitHub personal access token
+For full GitHub CLI documentation, run:
+  github --help
 EOF
     exit 1
 fi
 
-# Parse commands
-case "$1" in
-    create)
-        shift
-        if [ $# -lt 1 ]; then
-            error_exit "Repository name required"
-        fi
-        create_repo "$@"
-        ;;
-    clone)
-        shift
-        if [ $# -lt 1 ]; then
-            error_exit "Repository name required"
-        fi
-        clone_repo "$@"
-        ;;
-    push)
-        shift
-        push_repo "$@"
-        ;;
-    *)
-        error_exit "Unknown command: $1"
-        ;;
-esac
+# Ensure GitHub CLI is installed and authenticated
+ensure_github_cli
+
+# Pass all arguments directly to gh
+gh "$@"
+status=$?
+
+if [ $status -eq 0 ]; then
+    success "Command completed successfully"
+else
+    error_exit "Command failed with exit code $status"
+fi
