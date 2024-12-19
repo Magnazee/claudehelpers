@@ -1,49 +1,23 @@
 #!/bin/bash
 
-# Get the directory of this script
+# Get the directory of this script and source utilities
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+source "$PROJECT_ROOT/lib/wrapper-utils.sh"
 
-# Source environment if exists
-if [ -f "$PROJECT_ROOT/env.sh" ]; then
-    source "$PROJECT_ROOT/env.sh"
-fi
+# Initialize environment
+check_environment
 
-# Color codes for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
-
-error_exit() {
-    echo -e "${RED}Error: $1${NC}" >&2
-    exit 1
-}
-
-success() {
-    echo -e "${GREEN}$1${NC}"
-}
+# Check for required credentials before proceeding
+check_required_vars GITHUB_TOKEN
 
 # Function to check/install GitHub CLI
 ensure_github_cli() {
-    if ! command -v gh >/dev/null 2>&1; then
-        echo "Installing GitHub CLI..."
-        if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
-            winget install --id GitHub.cli || error_exit "Failed to install GitHub CLI"
-        elif [[ "$OSTYPE" == "darwin"* ]]; then
-            brew install gh || error_exit "Failed to install GitHub CLI"
-        elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-            if command -v apt >/dev/null 2>&1; then
-                curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
-                && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-                && sudo apt update \
-                && sudo apt install gh
-            elif command -v dnf >/dev/null 2>&1; then
-                sudo dnf install gh
-            else
-                error_exit "Unable to install GitHub CLI. Please install manually from https://cli.github.com/"
-            fi
-        fi
+    check_command "/c/Program Files/GitHub CLI/gh.exe" "Please run './bin/github setup' to install GitHub CLI."
+    
+    # Add to PATH if not already there
+    if [[ ":$PATH:" != *":/c/Program Files/GitHub CLI:"* ]]; then
+        export PATH="/c/Program Files/GitHub CLI:$PATH"
     fi
 
     # Ensure authentication
@@ -51,8 +25,20 @@ ensure_github_cli() {
         if [ -n "$GITHUB_TOKEN" ]; then
             echo "$GITHUB_TOKEN" | gh auth login --with-token
         else
-            gh auth login
+            error_exit "GitHub token not found and interactive authentication not supported. Please set GITHUB_TOKEN in env.sh"
         fi
+    fi
+}
+
+# Function to handle initial setup
+setup_github_cli() {
+    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
+        echo "Installing GitHub CLI..."
+        winget install --id GitHub.cli || error_exit "Failed to install GitHub CLI"
+        success "GitHub CLI installed successfully. Please restart your terminal."
+        exit 0
+    else
+        error_exit "Automatic installation only supported on Windows. Please install GitHub CLI manually from https://cli.github.com/"
     fi
 }
 
@@ -63,10 +49,18 @@ Usage: github <command> [arguments...]
 
 This is a wrapper around the GitHub CLI (gh) that handles:
 - Automatic CLI installation
-- Authentication via GITHUB_TOKEN or interactive login
+- Authentication via GITHUB_TOKEN
 - Cross-platform support
 
-All GitHub CLI commands are supported. Examples:
+Environment Variables Required:
+  GITHUB_TOKEN    GitHub personal access token
+
+Commands:
+  setup           Install GitHub CLI (Windows only)
+  <gh command>    Any GitHub CLI command
+
+Examples:
+  github setup
   github repo create myrepo --public
   github repo clone owner/repo
   github issue list
@@ -79,7 +73,13 @@ EOF
     exit 1
 fi
 
-# Ensure GitHub CLI is installed and authenticated
+# Handle setup command
+if [ "$1" = "setup" ]; then
+    setup_github_cli
+    exit 0
+fi
+
+# For all other commands, ensure GitHub CLI is ready
 ensure_github_cli
 
 # Pass all arguments directly to gh
